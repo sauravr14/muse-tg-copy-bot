@@ -154,7 +154,7 @@ class SourceBEngine:
                 if isinstance(e, (OSError, asyncio.TimeoutError)):
                     await self._sleep(_NET_RETRY)
                     continue
-                log.warning("Source B copy of msg %s failed (%s)",
+                log.exception("Source B copy of msg %s failed (%s)",
                             getattr(msg, "id", "?"), code)
                 return False
 
