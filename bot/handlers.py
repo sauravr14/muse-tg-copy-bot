@@ -663,53 +663,94 @@ class StatusPanel:
         s = self._snap()
         s2 = self._snap2()
 
+        has_session = self.ctx.cfg.has_session
         running = db.get("running")
         paused = db.get("paused")
-        if not self.ctx.cfg.has_session:
-            icon, state = "⚪", "disabled — no SESSION_STRING"
-        elif paused:
-            icon, state = "🟡", "paused"
-        elif running:
-            icon = "🟢"
-            st = s.get("state", "idle")
-            if st == "copying":
-                state = "copying"
-            elif st in ("gap", "cooldown"):
-                left = 0.0
-                pacer = getattr(self.ctx.eng_a, "_pacer", None)
-                if pacer is not None:
-                    left = pacer.remaining()
-                state = f"{'cooldown' if st == 'cooldown' else 'gap'} ({_dur(left)} left)"
-            elif st == "flood-wait":
-                state = f"flood-wait ({_dur(s.get('state_secs', 0))})"
-            elif st == "watching":
-                state = "watching for new files"
+        a_primary = bool(has_session and (running or paused))
+        b_primary = bool(not a_primary and s2.get("configured"))
+
+        if a_primary:
+            if paused:
+                icon, state = "\U0001F7E1", "paused"
+            elif running:
+                icon = "\U0001F7E2"
+                st = s.get("state", "idle")
+                if st == "copying":
+                    state = "copying"
+                elif st in ("gap", "cooldown"):
+                    pacer = getattr(self.ctx.eng_a, "_pacer", None)
+                    left = pacer.remaining() if pacer is not None else 0.0
+                    state = f"{'cooldown' if st == 'cooldown' else 'gap'} ({_dur(left)} left)"
+                elif st == "flood-wait":
+                    state = f"flood-wait ({_dur(s.get('state_secs', 0))})"
+                elif st == "watching":
+                    state = "watching for new files"
+                else:
+                    state = st
             else:
-                state = st
-        else:
-            icon, state = "⚪", "idle"
+                icon, state = "\U000026AA", "idle"
 
-        total = s.get("total", 0) or 0
-        pos = s.get("position", 0) or 0
-        latest = getattr(self.ctx.eng_a, "_latest", 0) if self.ctx.eng_a else 0
-        start_last = latest - total
-        if total > 0:
-            done_share = max(0.0, min(100.0, (pos - start_last) / total * 100))
-        else:
-            done_share = 100.0 if not running else 0.0
+            total = s.get("total", 0) or 0
+            pos = s.get("position", 0) or 0
+            latest = getattr(self.ctx.eng_a, "_latest", 0) if self.ctx.eng_a else 0
+            start_last = latest - total
+            if total > 0:
+                done_share = max(0.0, min(100.0, (pos - start_last) / total * 100))
+            else:
+                done_share = 0.0
 
-        lines = [
-            f"{icon} <b>Copy status</b> — {state}",
-            f"<code>{_bar(done_share)}</code> {done_share:.0f}%",
-            f"Position: msg <code>{pos}</code> / <code>{latest or '—'}</code>",
-            f"Copied: <b>{s.get('sent', 0)}</b> · skipped: {s.get('skipped', 0)} · failed: {s.get('failed', 0)}",
-            f"Batch: {s.get('batch_n', 0)}/{s.get('batch', 20)} "
-            f"(gap {s.get('delay', 3)}s · wait {s.get('wait', 30)}s)",
-            f"Speed: {s.get('speed', 0):.1f}/min · ETA: {_dur(s.get('eta', 0))} · elapsed: {_dur(s.get('elapsed', 0))}",
-            f"All-time: {s.get('all_sent', 0)} sent · {s.get('all_failed', 0)} failed",
-        ]
-        if s2.get("configured"):
-            st2 = "🟢" if s2.get("on") else "⚪"
+            lines = [
+                f"{icon} <b>Copy status</b> — Source A {state}",
+                f"<code>{_bar(done_share)}</code> {done_share:.0f}%",
+                f"Position: msg <code>{pos}</code> / <code>{latest or '—'}</code>",
+                f"Copied: <b>{s.get('sent', 0)}</b> · skipped: {s.get('skipped', 0)} · failed: {s.get('failed', 0)}",
+                f"Batch: {s.get('batch_n', 0)}/{s.get('batch', 20)} "
+                f"(gap {s.get('delay', 3)}s · wait {s.get('wait', 30)}s)",
+                f"Speed: {s.get('speed', 0):.1f}/min · ETA: {_dur(s.get('eta', 0))} · elapsed: {_dur(s.get('elapsed', 0))}",
+            ]
+        elif b_primary:
+            on = bool(s2.get("on"))
+            st = s2.get("state", "idle")
+            icon = "\U0001F7E2" if on else "\U000026AA"
+            state = f"Source B {st}" if on else "Source B idle"
+            sent = s2.get("sent", 0) or 0
+            skipped = s2.get("skipped", 0) or 0
+            failed = s2.get("failed", 0) or 0
+            queue = s2.get("queue", 0) or 0
+            done = sent + skipped + failed
+            total = done + queue
+            done_share = (done / total * 100) if total > 0 else 0.0
+            eng_b = self.ctx.eng_b
+            t0 = getattr(eng_b, "started_at", None) if eng_b else None
+            elapsed = (time.time() - t0) if t0 else 0.0
+            speed = (sent / elapsed * 60) if elapsed > 0 else 0.0
+            eta = (queue / (sent / elapsed)) if elapsed > 0 and sent > 0 else 0.0
+            lines = [
+                f"{icon} <b>Copy status</b> — {state}",
+                f"<code>{_bar(done_share)}</code> {done_share:.0f}%",
+                f"Processed: <code>{done}</code> · queue: <code>{queue}</code>",
+                f"Copied: <b>{sent}</b> · skipped: {skipped} · failed: {failed}",
+                f"Batch: {s2.get('batch_n', 0)}/{db.get('batch', 20)} "
+                f"(gap {db.get('delay', 3)}s · wait {db.get('wait', 30)}s)",
+                f"Speed: {speed:.1f}/min · ETA: {_dur(eta)} · elapsed: {_dur(elapsed)}",
+            ]
+        else:
+            if not has_session:
+                state = "idle — no SESSION_STRING (Source A disabled)"
+            else:
+                state = "idle"
+            lines = [
+                f"\U000026AA <b>Copy status</b> — {state}",
+                f"<code>{_bar(0.0)}</code> 0%",
+            ]
+
+        lines.append(
+            f"All-time: {db.stat_get('total_sent')} sent · {db.stat_get('total_failed')} failed"
+        )
+        if b_primary:
+            pass  # already the main section
+        elif s2.get("configured"):
+            st2 = "\U0001F7E2" if s2.get("on") else "\U000026AA"
             lines.append(
                 f"Source B: {st2} {s2.get('state', 'idle')} · queue {s2.get('queue', 0)} · "
                 f"copied {s2.get('sent', 0)}"
