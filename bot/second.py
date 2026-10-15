@@ -9,6 +9,7 @@ import asyncio
 import logging
 import time
 
+from pyrogram.enums import ParseMode
 from .engine import FATAL_ERRORS, FatalCopyError, _err_code, _flood_secs
 from .utils import (
     Pacer,
@@ -130,7 +131,7 @@ class SourceBEngine:
         floods = 0
         while True:
             try:
-                await msg.copy(dest, caption=cap or None, parse_mode="HTML")
+                await msg.copy(dest, caption=cap or None, parse_mode=ParseMode.HTML)
                 return True
             except StopRequested:
                 raise
