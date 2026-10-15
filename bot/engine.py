@@ -9,6 +9,7 @@ import logging
 import re
 import time
 
+from pyrogram.enums import ParseMode
 from .live import wait_for_new
 from .utils import (
     Pacer,
@@ -201,7 +202,7 @@ class CopyEngine:
         floods = 0
         while True:
             try:
-                await msg.copy(dest, caption=cap or None, parse_mode="HTML")
+                await msg.copy(dest, caption=cap or None, parse_mode=ParseMode.HTML)
                 return True
             except StopRequested:
                 raise
