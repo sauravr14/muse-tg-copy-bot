@@ -225,7 +225,7 @@ class CopyEngine:
                 if isinstance(e, (OSError, asyncio.TimeoutError)):
                     await self._sleep(_NET_RETRY)
                     continue
-                log.warning("copy of msg %s failed (%s)", getattr(msg, "id", "?"), code)
+                log.exception("copy of msg %s failed (%s)", getattr(msg, "id", "?"), code)
                 return False
 
     # -- main loop -------------------------------------------------------
