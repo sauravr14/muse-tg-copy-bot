@@ -1,0 +1,4 @@
+# Distribution name is pyrofork; it is imported as `pyrogram` (drop-in fork).
+pyrofork==2.3.69
+aiohttp
+python-dotenv
